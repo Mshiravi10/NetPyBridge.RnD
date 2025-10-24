@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Set Python DLL path
+      run: |
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          echo "PYTHONNET_PYDLL=python312.dll" >> $GITHUB_ENV
+        else
+          python -c "import sysconfig; print(f'PYTHONNET_PYDLL={sysconfig.get_config_var(\"LIBDIR\")}/libpython3.12.so')" >> $GITHUB_ENV
+        fi
+
+    - name: Install Python dependencies
+      run: |
+        if [ -f "src/PyAuthored/requirements.txt" ]; then
+          pip install -r src/PyAuthored/requirements.txt
+        fi
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+
+    - name: Test
+      run: dotnet test --no-build --configuration Release --verbosity normal
+
+    - name: Test with verbose error mode
+      run: |
+        export NETPYBRIDGE_ERROR_MODE=Verbose
+        dotnet test --no-build --configuration Release --verbosity normal
+      env:
+        NETPYBRIDGE_ERROR_MODE: Verbose
