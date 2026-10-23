@@ -77,7 +77,7 @@ public class PythonProxy<T> : DispatchProxy where T : class
             using (Py.GIL())
             {
                 var methodName = targetMethod.Name;
-                dynamic pyMethod = _target.GetAttr(methodName);
+                using var pyMethod = _target.GetAttr(methodName);
 
                 if (pyMethod == null)
                     throw new InvalidOperationException($"Method '{methodName}' not found on Python object");
@@ -107,7 +107,7 @@ public class PythonProxy<T> : DispatchProxy where T : class
         }
     }
 
-    private bool IsCoroutine(dynamic pyMethod)
+    private bool IsCoroutine(PyObject pyMethod)
     {
         try
         {
@@ -129,10 +129,10 @@ public class PythonProxy<T> : DispatchProxy where T : class
                (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>));
     }
 
-    private object ExecuteAsyncMethod(dynamic pyMethod, object?[]? args, Type returnType)
+    private object ExecuteAsyncMethod(PyObject pyMethod, object?[]? args, Type returnType)
     {
         var pyArgs = ConvertArguments(args);
-        dynamic coroutine = pyArgs.Length == 0 ? pyMethod() : pyMethod(pyArgs);
+        using var coroutine = pyMethod.Invoke(pyArgs);
 
         if (returnType == typeof(Task))
         {
@@ -149,19 +149,19 @@ public class PythonProxy<T> : DispatchProxy where T : class
         throw new InvalidOperationException($"Unsupported async return type: {returnType}");
     }
 
-    private object ExecuteCoroutineSync(dynamic pyMethod, object?[]? args)
+    private object ExecuteCoroutineSync(PyObject pyMethod, object?[]? args)
     {
         var pyArgs = ConvertArguments(args);
-        dynamic coroutine = pyArgs.Length == 0 ? pyMethod() : pyMethod(pyArgs);
+        using var coroutine = pyMethod.Invoke(pyArgs);
 
         dynamic asyncio = Py.Import("asyncio");
         return asyncio.run(coroutine);
     }
 
-    private object ExecuteSyncMethod(dynamic pyMethod, object?[]? args)
+    private object ExecuteSyncMethod(PyObject pyMethod, object?[]? args)
     {
         var pyArgs = ConvertArguments(args);
-        return pyArgs.Length == 0 ? pyMethod() : pyMethod(pyArgs);
+        return pyMethod.Invoke(pyArgs);
     }
 
     private PyObject[] ConvertArguments(object?[]? args)
@@ -169,12 +169,10 @@ public class PythonProxy<T> : DispatchProxy where T : class
         if (args == null || args.Length == 0)
             return Array.Empty<PyObject>();
 
-        var pyArgs = new PyObject[args.Length];
-        for (int i = 0; i < args.Length; i++)
-        {
-            pyArgs[i] = PrimitiveConverter.ToPython(args[i]);
-        }
-        return pyArgs;
+        return args
+            .Where(argument => argument is not CancellationToken)
+            .Select(PrimitiveConverter.ToPython)
+            .ToArray();
     }
 
     private object? ConvertResult(object result, Type targetType)
@@ -198,7 +196,10 @@ public class PythonProxy<T> : DispatchProxy where T : class
     {
         var interfaceName = typeof(T).Name;
         var methodName = method.Name;
-        var invocationInfo = new InvocationInfo(interfaceName, methodName, args ?? Array.Empty<object>());
+        var invocationInfo = new InvocationInfo(
+            interfaceName,
+            methodName,
+            args?.Select(argument => argument!).ToArray() ?? Array.Empty<object>());
 
         if (_errorMode == ErrorHandlingMode.Verbose)
         {

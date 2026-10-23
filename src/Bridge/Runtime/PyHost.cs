@@ -99,11 +99,10 @@ public static class PyHost
             dynamic sys = Py.Import("sys");
             dynamic path = sys.path;
 
-            var pySrcPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "PyAuthored", "py_src");
-            var fullPath = Path.GetFullPath(pySrcPath);
-            if (Directory.Exists(fullPath))
+            var pySrcPath = FindPySourcePath();
+            if (pySrcPath != null)
             {
-                path.insert(0, fullPath);
+                path.insert(0, pySrcPath);
             }
 
             var envPaths = Environment.GetEnvironmentVariable("NETPYBRIDGE_PY_PATHS");
@@ -130,5 +129,23 @@ public static class PyHost
                 }
             }
         }
+    }
+
+    private static string? FindPySourcePath()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (current != null)
+        {
+            var candidate = Path.Combine(current.FullName, "src", "PyAuthored", "py_src");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
     }
 }

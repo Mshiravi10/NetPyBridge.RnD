@@ -42,13 +42,18 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    - name: Set Python DLL path
+    - name: Set Python DLL path (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
       run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          echo "PYTHONNET_PYDLL=python312.dll" >> $GITHUB_ENV
-        else
-          python -c "import sysconfig; print(f'PYTHONNET_PYDLL={sysconfig.get_config_var(\"LIBDIR\")}/libpython3.12.so')" >> $GITHUB_ENV
-        fi
+        $pythonRoot = python -c "import sys; print(sys.base_prefix)"
+        "PYTHONNET_PYDLL=$pythonRoot\python312.dll" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Set Python DLL path (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        python -c "import sysconfig; print('PYTHONNET_PYDLL=' + sysconfig.get_config_var('LIBDIR') + '/' + sysconfig.get_config_var('LDLIBRARY'))" >> "$GITHUB_ENV"
 
     - name: Install Python dependencies
       run: |
@@ -66,8 +71,6 @@ jobs:
       run: dotnet test --no-build --configuration Release --verbosity normal
 
     - name: Test with verbose error mode
-      run: |
-        export NETPYBRIDGE_ERROR_MODE=Verbose
-        dotnet test --no-build --configuration Release --verbosity normal
+      run: dotnet test --no-build --configuration Release --verbosity normal
       env:
         NETPYBRIDGE_ERROR_MODE: Verbose

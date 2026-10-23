@@ -41,8 +41,9 @@ public class PythonProxyTests
         var provider = services.BuildServiceProvider();
         var textOps = provider.GetRequiredService<ITextOps>();
 
-        var result = await textOps.SummarizeAsync("This is a very long text that should be summarized because it exceeds the maximum length limit");
-        result.Should().Be("This is a very long text that should be summarized because it exceeds the maximum length limit...");
+        var input = new string('a', 121);
+        var result = await textOps.SummarizeAsync(input);
+        result.Should().Be(new string('a', 120) + "...");
     }
 
     [Fact]

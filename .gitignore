@@ -441,6 +441,14 @@ ENV/
 env.bak/
 venv.bak/
 
+# Private keys and local credentials
+*.key
+*.pem
+id_rsa
+id_ed25519
+aminmamad
+aminmamad.pub
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -458,3 +466,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Local codebase index
+.codebase-memory/
